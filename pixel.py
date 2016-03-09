@@ -13,15 +13,13 @@ from skimage.filters import gabor_kernel
 
 # feature extraction methods
 def lbp(image, n=3, method="uniform"):
-    return local_binary_pattern(image, n, 3 * n, method=method)
+    return local_binary_pattern(image, n, 8 * n, method=method)
 
 def gabor(image, freqs=[0.4], theta=[0, 30, 60, 90, 120, 150], sigmas=[3]):
     i = image
     for f, t, s in itertools.product(freqs, theta, sigmas):
         kern = np.real(gabor_kernel(f, theta=t, sigma_x=s, sigma_y=s))
         i = ndi.convolve(k, kern, mode="wrap")
-
-    #return gabor_filter(image, freq, theta)[0]
     return i
 
 
@@ -50,7 +48,8 @@ if __name__ == "__main__":
     print("Flattening feature array: %d x %d" % feat_r.shape)
 
     # set up batch k-means
-    mbkm = MiniBatchKMeans(20)
+    n_classes = 10
+    mbkm = MiniBatchKMeans(n_classes)
 
     # cluster the local binary patterns with default settings (k = 8)
     clus = mbkm.fit(feat_r)
@@ -77,5 +76,5 @@ if __name__ == "__main__":
     #    i += 1
 
     # make texture classes more visible and display them
-    labs *= 100  # exaggerate values so that the difference is obvious
+    labs *= int(255 / n_classes)  # exaggerate values so that the difference is obvious
     imshow(image, labs)
