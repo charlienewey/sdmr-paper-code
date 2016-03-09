@@ -1,22 +1,28 @@
+import itertools
 import os
 import sys
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-
-import cv2
-
+import scipy.ndimage as ndi
 from skimage.io import imread
 from sklearn.cluster import MiniBatchKMeans
 from skimage.feature import local_binary_pattern
-from skimage.filters import gabor_filter
+from skimage.filters import gabor_kernel
 
 # feature extraction methods
-def lbp(image, n=3):
-    return local_binary_pattern(image, n, 3 * n)
+def lbp(image, n=3, method="uniform"):
+    return local_binary_pattern(image, n, 3 * n, method=method)
 
-def gabor(image, freq=0.1, theta=45):
-    return gabor_filter(image, freq, theta)[0]
+def gabor(image, freqs=[0.4], theta=[0, 30, 60, 90, 120, 150], sigmas=[3]):
+    i = image
+    for f, t, s in itertools.product(freqs, theta, sigmas):
+        kern = np.real(gabor_kernel(f, theta=t, sigma_x=s, sigma_y=s))
+        i = ndi.convolve(k, kern, mode="wrap")
+
+    #return gabor_filter(image, freq, theta)[0]
+    return i
 
 
 def imshow(*images):
@@ -44,7 +50,7 @@ if __name__ == "__main__":
     print("Flattening feature array: %d x %d" % feat_r.shape)
 
     # set up batch k-means
-    mbkm = MiniBatchKMeans()
+    mbkm = MiniBatchKMeans(20)
 
     # cluster the local binary patterns with default settings (k = 8)
     clus = mbkm.fit(feat_r)
@@ -55,21 +61,21 @@ if __name__ == "__main__":
     labs = labs.reshape(image.shape[0], image.shape[1])
     print("Reshaping label array: %d x %d" % labs.shape)
 
-    nbhd = 10
-    avgs = np.zeros((labs.shape[0] / nbhd, labs.shape[1] / nbhd))
-    print(avgs.shape)
-    i, j = (0, 0)
-    for x in range(0, labs.shape[0] - nbhd, nbhd):
-        for y in range(0, labs.shape[1] - nbhd):
-            if j >= labs.shape[1] / nbhd:
-                j = 0
-
-            patch = labs[x:x+nbhd,y:y+nbhd][0]
-            mode = np.bincount(patch).argmax()
-            avgs[i,j] = mode
-            j += 1
-        i += 1
+    # neighbourhood-ify
+    #nbhd = 5
+    #avgs = np.zeros((labs.shape[0] / nbhd, labs.shape[1] / nbhd))
+    #print(avgs.shape)
+    #i, j = (0, 0)
+    #for x in range(0, labs.shape[0] - nbhd, nbhd):
+    #    for y in range(0, labs.shape[1] - nbhd):
+    #        if j >= labs.shape[1] / nbhd:
+    #            j = 0
+    #        patch = labs[x:x+nbhd,y:y+nbhd][0]
+    #        mode = np.bincount(patch).argmax()
+    #        avgs[i,j] = mode
+    #        j += 1
+    #    i += 1
 
     # make texture classes more visible and display them
-    avgs *= 10  # exaggerate values so that the difference is obvious
-    imshow(image, avgs)
+    labs *= 100  # exaggerate values so that the difference is obvious
+    imshow(image, labs)
