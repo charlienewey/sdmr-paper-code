@@ -7,20 +7,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.ndimage as ndi
 from skimage.io import imread
-from sklearn.cluster import MiniBatchKMeans
+from sklearn.cluster import KMeans
 from skimage.feature import local_binary_pattern
 from skimage.filters import gabor_kernel
+from skimage.filters import gabor_filter
 
 # feature extraction methods
 def lbp(image, n=3, method="uniform"):
     return local_binary_pattern(image, n, 8 * n, method=method)
 
-def gabor(image, freqs=[0.4], theta=[0, 30, 60, 90, 120, 150], sigmas=[3]):
-    i = image
-    for f, t, s in itertools.product(freqs, theta, sigmas):
-        kern = np.real(gabor_kernel(f, theta=t, sigma_x=s, sigma_y=s))
-        i = ndi.convolve(k, kern, mode="wrap")
-    return i
+def gabor(image, freqs=[0.4], theta=[0, 30, 60, 90, 120, 150]):
+    #feats = []
+    #for f, t in itertools.product(0.1, 30):
+    #    feats.append(gabor_filter(image, f, theta=t))
+    #return feats
+    f = gabor_filter(image, 0.1, 120)
+    return f[0] + np.sqrt(f[1] ** 2)
 
 
 def imshow(*images):
@@ -49,7 +51,7 @@ if __name__ == "__main__":
 
     # set up batch k-means
     n_classes = 10
-    mbkm = MiniBatchKMeans(n_classes)
+    mbkm = KMeans(n_classes)
 
     # cluster the local binary patterns with default settings (k = 8)
     clus = mbkm.fit(feat_r)
