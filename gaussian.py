@@ -16,6 +16,8 @@ from sklearn.metrics import adjusted_rand_score
 from sklearn.metrics import homogeneity_score
 from sklearn.metrics import completeness_score
 
+from skimage.exposure import equalize_hist
+
 from skimage.feature import local_binary_pattern
 from skimage.feature import blob_dog
 
@@ -66,14 +68,14 @@ def _imshow(*images):
         fig.colorbar(cax)
 
 
-def segment(path, n_clusters=5):
-    image = io.imread(path, as_grey=True)
+def segment(path, n_clusters=15):
+    image = equalize_hist(io.imread(path, as_grey=True))
 
     # downscale and smooth
-    blur_image = gaussian_filter(image, 15)
+    blur_image = gaussian_filter(image, 10)
 
     # get texture features
-    num_feats, feats = lbp(blur_image, n=7, method="nri_uniform")
+    num_feats, feats = lbp(blur_image, n=5, method="uniform")
     feats_r = feats.reshape(-1, num_feats)
 
     # set up batch k-means
@@ -117,7 +119,7 @@ if __name__ == "__main__":
     path_2 = os.path.abspath(os.path.join(os.getcwd(), sys.argv[2]))
 
     # cluster images
-    n_clusters = 10
+    n_clusters = 8
     image, blur_image, labels = segment(path, n_clusters=n_clusters)
     image_2, blur_image_2, labels_2 = segment(path_2, n_clusters=n_clusters)
 
