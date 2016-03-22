@@ -2,93 +2,87 @@ import itertools
 import os
 import sys
 
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.ndimage as ndi
-from skimage.io import imread
+
+import skimage.io as io
+io.use_plugin("matplotlib")
+
 from sklearn.cluster import MiniBatchKMeans as k_means
+
 from skimage.feature import local_binary_pattern
 from skimage.feature import blob_dog
+
 from skimage.filters import gabor_filter
 from skimage.filters import gaussian_filter
 
+from skimage.util import view_as_blocks
+
 # feature extraction methods
 def lbp(image, n=3, method="uniform"):
-    return local_binary_pattern(image, n, 8 * n, method=method)
+    return (1, local_binary_pattern(image, P=n, R=8 * n, method=method))
 
-def gabor(image, freqs=[0.4], theta=[0, 30, 60, 90, 120, 150]):
-    f = gabor_filter(image, 0.1, 120)
-    return f[0] + np.sqrt(f[1] ** 2)  # real and imaginary parts
+def gabor(image, freqs=[0.1, 0.4], thetas=[0, 30, 60, 90, 120, 150]):
+    params = list(itertools.product(freqs, thetas))
+    features = []
+    for freq, theta in params:
+        g = gabor_filter(image, freq, theta)
+        features.append(g[0] + np.real(g[1]))
+    features = np.asarray(features).swapaxes(0, 2)
+    return (len(params), features)
 
-def neighbourhoodify(image):
-    # neighbourhood-ify
-    nbhd = 5
-    avgs = np.zeros((labels.shape[0] / nbhd, labels.shape[1] / nbhd))
-    i, j = (0, 0)
-    for x in range(0, labels.shape[0] - nbhd, nbhd):
-        for y in range(0, labels.shape[1] - nbhd):
-            if j >= labels.shape[1] / nbhd:
-                j = 0
-            patch = labels[x:x+nbhd,y:y+nbhd][0]
-            mode = np.bincount(patch).argmax()
-            avgs[i,j] = mode
-            j += 1
-        i += 1
+
+# take mode over neighbourhood
+def neighbourhoodify(image, nbhd=10):
+    avgs = np.zeros(map(lambda x: int(x / nbhd), image.shape))
+    blocks = view_as_blocks(image, (nbhd, nbhd))
+    for row in range(0, len(blocks)):
+        for col in range(0, len(blocks[row])):
+            mode = np.bincount(blocks[row,col].ravel()).argmax()
+            avgs[row, col] = mode
     return avgs
 
 
-def imshow(*images):
-    # create the figure
-    fig = plt.figure(figsize=(10, 10))
-    for i in range(0, len(images)):
-        # display original image with locations of patchea
-        ax = fig.add_subplot(len(images), 1, i + 1)
-        ax.imshow(images[i], cmap=plt.cm.gray, interpolation="nearest", vmin=0, vmax=255)
-    # display the patches and plot
-    plt.show()
+def _imshow(image):
+    plt.figure()
+    io.imshow(image)
 
 
 if __name__ == "__main__":
     # set up input
     path = os.path.abspath(os.path.join(os.getcwd(), sys.argv[1]))
-    image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-    print("Image dimensions: %d x %d" % image.shape)
+    image = io.imread(path, as_grey=True)
 
     # downscale and smooth
-    blur_image = cv2.pyrUp(cv2.pyrDown(image))
+    blur_image = gaussian_filter(image, 15)  # cv2.pyrUp(cv2.pyrDown(image))
 
     # get texture features
-    feat = lbp(blur_image, n=15)
-    print("Feature dimensions: %d x %d" % feat.shape)
-    feat_r = feat.reshape((feat.shape[0] * feat.shape[1], 1))
-    print("Flattening feature array: %d x %d" % feat.shape)
+    num_feats, feats = lbp(blur_image, n=6, method="uniform")
+    feats_r = feats.reshape(-1, num_feats)
 
     # set up batch k-means
-    n_classes = 15
+    n_classes = 10
     mbkm = k_means(n_classes)
 
     # cluster the local binary patterns with default settings (k = 8)
-    clus = mbkm.fit(feat_r)
+    clus = mbkm.fit(feats_r)
     labels = clus.labels_
-
-    print("Labels shape: %d" % labels.shape)
 
     # reshape label arrays
     labels = labels.reshape(blur_image.shape[0], blur_image.shape[1])
-    print("Reshaping label array: %d x %d" % labels.shape)
 
     # make mask of dominant texture
-    hist, bins = np.histogram(labels.ravel(), 256, [0, n_classes])
+    hist, bins = np.histogram(labels, n_classes, [0, n_classes])
     dominant_texture = bins[hist.argmax()]
+
+    print("Dominant texture class: %d" % (dominant_texture))
     mask = labels == dominant_texture
 
-    # plot intensity values across dominant texture
-    plt.hist(image[np.where(mask)])
+    # plot histogram of intensity values across dominant texture
+    plt.hist(blur_image[np.where(mask)])
 
-    # change intensity values so that the texture can be easily seen
-    image[mask] = 255
-
-    # make texture classes more visible and display them
-    imshow(image,
-           labels * int(255 / n_classes))
+    # display images
+    _imshow(blur_image)
+    _imshow(labels)
+    io.show()
