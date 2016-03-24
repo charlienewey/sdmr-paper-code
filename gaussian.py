@@ -125,7 +125,7 @@ def segment_shadow(image, labels):
         mask = np.nonzero((labels.ravel() == i) == True)[0];
         # if there are pixels with this label...
         if len(mask) > 0:
-            if img[mask].var() > 0.01:
+            if img[mask].var() > 0.005:
                 thresh = threshold_otsu(img[mask])
                 shadow = shadow_seg < thresh
                 shadow_seg[mask] = shadow[mask]
