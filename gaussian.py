@@ -171,5 +171,17 @@ if __name__ == "__main__":
     cluster_metrics(labels.ravel(), labels_2.ravel())
 
     # show figures
-    _imshow({"image": shadow_seg}, {"image": shadow_seg_2})
+    masked = image_2.copy()
+    masked[shadow_seg_2 == 1] = 0
+    _imshow(
+        {"image": shadow_seg_2},
+        {"image": image_2},
+        {"image": masked}
+    )
+
+    _imshow(
+        {"image": shadow_seg},
+        {"image": image}
+    )
+
     io.show()
