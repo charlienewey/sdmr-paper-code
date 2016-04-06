@@ -83,7 +83,7 @@ def lbp(image, n=3, method="uniform"):
 
 def segment_texture(image, n_clusters=15):
     # blur and take local maxima
-    image = gaussian_filter(image, sigma=3)
+    image = gaussian_filter(image, sigma=8)
     blur_image = ndi.maximum_filter(image, size=3)
 
     # get texture features
