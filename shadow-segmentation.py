@@ -1,6 +1,7 @@
 import itertools
 import os
 import sys
+import time
 import warnings
 
 import numpy as np
@@ -18,15 +19,11 @@ from sklearn.metrics import adjusted_rand_score
 from sklearn.metrics import homogeneity_score
 from sklearn.metrics import completeness_score
 
-from skimage.exposure import equalize_hist
-
 from skimage.feature import local_binary_pattern
 
-from skimage.filters import gabor_filter
-from skimage.filters import gaussian_filter
-from skimage.filters import threshold_otsu
-
-from skimage.util import view_as_blocks
+from skimage.filter import gabor_filter
+from skimage.filter import gaussian_filter
+from skimage.filter import threshold_otsu
 
 
 def zero_pad(string, num_zeroes=5):
@@ -41,17 +38,13 @@ def zero_pad(string, num_zeroes=5):
 def _imshow(*images):
     fig = plt.figure()
     for i in range(0, len(images)):
-        im = images[i]["image"]
+        im = images[i]
         if im.shape[0] > im.shape[1]:
             ax = fig.add_subplot(1, len(images), i + 1)
         else:
             ax = fig.add_subplot(len(images), 1, i + 1)
 
-        if "cmap" in images[i]:
-            cmap = images[i]["cmap"]
-        else: cmap = plt.cm.inferno
-
-        cax = ax.imshow(images[i]["image"], cmap=cmap)
+        cax = ax.imshow(im, cmap=plt.cm.cubehelix)
         fig.colorbar(cax)
 
 
@@ -78,27 +71,33 @@ def cluster_metrics(labels_1, labels_2):
 
 
 def lbp(image, n=3, method="uniform"):
-    return (1, local_binary_pattern(image, P=n, R=8 * n, method=method))
+    return local_binary_pattern(image, P=8*n, R=n, method=method)
 
 
-def segment_texture(image, n_clusters=15):
+def segment_texture(image, n_clusters=15, init=None):
     # blur and take local maxima
-    image = gaussian_filter(image, sigma=8)
-    blur_image = ndi.maximum_filter(image, size=3)
+    blur_image = gaussian_filter(image, sigma=8)
+    blur_image = ndi.maximum_filter(blur_image, size=3)
 
     # get texture features
-    num_feats, feats = lbp(blur_image, n=5, method="uniform")
-    feats_r = feats.reshape(-1, num_feats)
+    feats = lbp(blur_image, n=5, method="uniform")
+    feats_r = feats.reshape(-1, 1)
 
-    # cluster the texture features
-    km = k_means(n_clusters=n_clusters)
+    # cluster the texture features, reusing initialised centres if already calculated
+    params = {"n_clusters": n_clusters, "batch_size": 500}
+    if init is not None:
+        params.update({"init": init})
+    km = k_means(**params)
     clus = km.fit(feats_r)
+
+    # copy relevant attributes
     labels = clus.labels_
+    clusters = clus.cluster_centers_
 
     # reshape label arrays
     labels = labels.reshape(blur_image.shape[0], blur_image.shape[1])
 
-    return (image, blur_image, labels)
+    return (image, blur_image, labels, clusters)
 
 
 def segment_shadow(image, labels, n_clusters=8):
@@ -120,10 +119,7 @@ def segment_shadow(image, labels, n_clusters=8):
 
 if __name__ == "__main__":
     # shut up scikit-image and numpy
-    import warnings
     warnings.simplefilter("ignore")
-
-    import time
 
     images = sys.argv[1:-1]
     output_dir = os.path.abspath(os.path.join(os.getcwd(), sys.argv[-1]))
@@ -132,14 +128,14 @@ if __name__ == "__main__":
 
     i = 0
     shape = io.imread(images[i], as_grey=True).shape
+    init = None
     for im_path in images:
         image = io.imread(im_path, as_grey=True)
 
         s = time.time()
 
         n_clusters = 8
-        image, blur_image, labels = segment_texture(image, n_clusters=n_clusters)
-
+        image, blur_image, labels, init = segment_texture(image, n_clusters=n_clusters, init=init)
         shadow_seg = segment_shadow(blur_image, labels, n_clusters)
 
         e = time.time()
@@ -151,60 +147,3 @@ if __name__ == "__main__":
 
     print("Average time to process a %s image: %f seconds" % (str(shape), np.average(times)))
     print("Total time for %d images: %f seconds" % (len(images), np.sum(times)))
-
-
-"""
-if __name__ == "__main__":
-    # set up input
-    path = os.path.abspath(os.path.join(os.getcwd(), sys.argv[1]))
-    path_2 = os.path.abspath(os.path.join(os.getcwd(), sys.argv[2]))
-
-    # read images
-    image = io.imread(path, as_grey=True)
-    image_2 = io.imread(path_2, as_grey=True)
-
-    # cluster images
-    n_clusters = 8
-    image, blur_image, labels = segment_texture(image, n_clusters=n_clusters)
-    image_2, blur_image_2, labels_2 = segment_texture(image_2, n_clusters=n_clusters)
-
-    # mask dominant textures
-    mask, blur_image = mask_dominant_label(blur_image, labels)
-    mask_2, blur_image_2 = mask_dominant_label(blur_image_2, labels_2)
-
-    # segment shadows
-    shadow_seg = segment_shadow(image, labels)
-    shadow_seg_2 = segment_shadow(image_2, labels_2)
-
-    # plot histograms of intensity values across dominant texture
-    fig = plt.figure()
-
-    ax = fig.add_subplot(2, 1, 1)
-    ax.hist(image[np.where(mask)])
-
-    ax = fig.add_subplot(2, 1, 2)
-    ax.hist(image_2[np.where(mask_2)])
-
-    # get and print cluster metrics
-    print("Dominant cluster metrics: ")
-    cluster_metrics(mask.ravel(), mask_2.ravel())
-
-    print("\nOverall cluster metrics: ")
-    cluster_metrics(labels.ravel(), labels_2.ravel())
-
-    # show figures
-    masked = image_2.copy()
-    masked[shadow_seg_2 == 1] = 0
-    _imshow(
-        {"image": shadow_seg_2},
-        {"image": image_2},
-        {"image": masked}
-    )
-
-    _imshow(
-        {"image": shadow_seg},
-        {"image": image}
-    )
-
-    io.show()
-"""
