@@ -10,8 +10,10 @@ from matplotlib import pyplot as plt
 
 from scipy import ndimage as ndi
 
+import sklearn.metrics
 from sklearn.cluster import MiniBatchKMeans
-from sklearn.cross_validation import train_test_split
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
 from sklearn import tree
 
 from skimage.color import rgb2gray
@@ -94,35 +96,54 @@ if __name__ == "__main__":
         feats[i][1] = l_std
         feats[i][2] = l_lbp
 
-    x_train, x_test, y_train, y_test = train_test_split(feats, g_truths, test_size=0.2, random_state=0)
-
     # put data into the right format
     def _reshape_im(arr, shape):
-        return np.asarray(arr.swapaxes(1, 3).swapaxes(1, 2), dtype="int32").reshape(shape)
+        a = np.asarray(arr.swapaxes(1, 3).swapaxes(1, 2), dtype="int32").reshape(shape)
+        return a
 
-    x_train = _reshape_im(x_train, (-1, 3))
-    y_train = _reshape_im(y_train, (-1, 1))
+    #x_train, x_test, y_train, y_test = train_test_split(feats, g_truths, test_size=0.3, random_state=None)
 
-    x_test = _reshape_im(x_test, (-1, 3))
-    y_test = _reshape_im(y_test, (-1, 1))
+    splits = 10
+    kf = KFold(n_splits=10, random_state=None, shuffle=True)
+    preds = []
+    jaccards = []
+    rands = []
+    for tr, te, in kf.split(feats):
+        x_train, x_test = feats[tr], feats[te]
+        y_train, y_test = g_truths[tr], g_truths[te]
 
-    feats = _reshape_im(feats, (-1, 3))
+        x_train = _reshape_im(x_train, (-1, 3))
+        y_train = _reshape_im(y_train, (-1, 1))
 
-    terry = tree.DecisionTreeClassifier(min_samples_split=5000, max_depth=4)
-    terry.fit(x_train, y_train)
-    print(terry.score(x_test, y_test))
+        x_test = _reshape_im(x_test, (-1, 3))
+        y_test = _reshape_im(y_test, (-1, 1))
 
-    predictions = terry.predict(feats)
+        terry = tree.DecisionTreeClassifier(min_samples_split=5000, max_depth=4)
+        terry.fit(x_train, y_train)
+
+        preds.append(terry.score(x_test, y_test))
+
+        predictions = terry.predict(x_test)
+
+        # jaccard
+        ys = y_test.ravel()
+        jaccards.append(sklearn.metrics.jaccard_similarity_score(ys, predictions))
+
+        # rand
+        rands.append(sklearn.metrics.adjusted_rand_score(ys, predictions))
+
+    print("Average performance, K-Fold Cross-Validation (k={}): {}".format(splits, sum(preds)/len(preds)))
+    print("Average jaccard score: {}".format(sum(jaccards)/len(jaccards)))
+    print("Average rand score: {}".format(sum(rands)/len(rands)))
 
     # write shadow segmentation out to disk
-    npx = nshp[0] * nshp[1]
-    for i in range(0, len(predictions), npx):
-        im = predictions[i:i+npx].reshape(nshp)
-
-        fn = os.path.join(output_dir, "output-%s.png" % (zero_pad(str(i / npx))))
-        io.imsave(fn, im * 255)
+    #npx = nshp[0] * nshp[1]
+    #for i in range(0, len(predictions), npx):
+    #    im = predictions[i:i+npx].reshape(nshp)
+    #    fn = os.path.join(output_dir, "output-%s.png" % (zero_pad(str(i / npx))))
+    #    io.imsave(fn, im * 255)
 
     # visualise decision tree
-    labels = ["local_maximum", "standard_deviation", "local_binary_pattern"]
-    with open("terry.dot", "w") as dotf:
-        tree.export_graphviz(terry, dotf, feature_names=labels, filled=False, proportion=True)
+    # labels = ["local_maximum", "standard_deviation", "local_binary_pattern"]
+    # with open("terry.dot", "w") as dotf:
+    #    tree.export_graphviz(terry, dotf, feature_names=labels, filled=False, proportion=True)
