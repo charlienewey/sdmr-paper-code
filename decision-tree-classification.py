@@ -62,7 +62,6 @@ if __name__ == "__main__":
 
     images = gen_file_list(sys.argv[1])
     truths = gen_file_list(sys.argv[2])
-    output_dir = os.path.abspath(os.path.join(os.getcwd(), sys.argv[3]))
 
     assert(len(images) == len(truths))
 
